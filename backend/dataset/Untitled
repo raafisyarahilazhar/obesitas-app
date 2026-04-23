@@ -1,0 +1,96 @@
+Bertindak sebagai Senior AI Engineer dan Computer Vision Engineer.
+
+Saya ingin membangun sistem AI yang mampu mendeteksi SEMUA jenis makanan dari gambar, bukan hanya terbatas pada class tertentu.
+
+⚠️ Sistem HARUS:
+- Tidak terbatas pada class YOLO saja
+- Bisa mengenali berbagai variasi makanan (banana cake, fried rice, burger, dll)
+- Tetap menggunakan YOLO sebagai bagian dari pipeline
+
+---
+
+🎯 TUJUAN SISTEM:
+
+1. Mendeteksi objek makanan dari gambar menggunakan YOLOv5
+2. Mengidentifikasi jenis makanan secara fleksibel menggunakan model tambahan (Image Classification atau CLIP)
+3. Melakukan mapping antara nama makanan hasil deteksi dengan dataset nutrisi besar (Food Nutrition Dataset)
+4. Memberikan informasi nutrisi dan rekomendasi untuk penderita diabetes
+
+---
+
+🧠 PENDEKATAN SISTEM:
+
+Gunakan HYBRID AI:
+
+1. YOLO → mendeteksi objek makanan (bounding box)
+2. Classifier / CLIP → mengenali jenis makanan secara luas (open vocabulary)
+3. Mapping Engine → mencocokkan hasil klasifikasi ke dataset nutrisi menggunakan:
+   - keyword matching
+   - fuzzy matching
+4. Nutrition Engine → mengambil data nutrisi
+5. Recommendation Engine → menentukan safe / limit
+
+---
+
+🔍 CONTOH FLOW:
+
+Input:
+gambar spaghetti
+
+YOLO:
+→ detect: food
+
+Classifier:
+→ "spaghetti carbonara"
+
+Mapping:
+→ "pasta"
+
+Dataset:
+→ pasta → calories, sugar
+
+Output:
+→ recommendation
+
+---
+
+⚙️ BACKEND:
+
+Gunakan FastAPI dengan endpoint:
+
+POST /scan
+
+Input:
+- image
+- glucose
+- bmi
+
+Output:
+{
+  "status": "success",
+  "detected_food": "spaghetti carbonara",
+  "mapped_food": "pasta",
+  "confidence": 0.88,
+  "nutrition": {...},
+  "recommendation": "limit"
+}
+
+---
+
+📌 REQUIREMENT:
+
+- Sistem harus mendukung berbagai jenis makanan (open vocabulary)
+- Tidak hanya bergantung pada class YOLO
+- Gunakan model tambahan untuk generalisasi
+- Gunakan dataset nutrisi besar (Kaggle)
+- Tambahkan fallback jika mapping gagal
+
+---
+
+🎯 OUTPUT:
+
+- Backend FastAPI lengkap
+- Integrasi YOLO + classifier
+- Mapping engine
+- Dataset processing
+- Contoh hasil API

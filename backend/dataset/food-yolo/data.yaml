@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 12
+names: ['Apple', 'Chapathi', 'Chicken Gravy', 'Fries', 'Idli', 'Pizza', 'Rice', 'Soda', 'Tomato', 'Vada', 'banana', 'burger']
+
+roboflow:
+  workspace: project
+  project: food-detector-acbog
+  version: 5
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/project/food-detector-acbog/dataset/5
