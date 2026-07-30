@@ -25,11 +25,10 @@ class FoodScanApp extends StatelessWidget {
         brightness: Brightness.light,
         scaffoldBackgroundColor: AppColors.bg,
         primaryColor: AppColors.accent,
-        colorScheme: ColorScheme.light(
+        colorScheme: const ColorScheme.light(
           primary: AppColors.accent,
           secondary: AppColors.accent,
           surface: AppColors.card,
-          background: AppColors.bg,
           error: AppColors.danger,
         ),
         useMaterial3: true,

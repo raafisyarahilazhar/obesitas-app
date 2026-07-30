@@ -27,6 +27,30 @@ def load_nutrition_database(filepath="./dataset/nutrition_dataset.csv"):
 def get_all_food_names():
     return list(_NUTRITION_DB.keys())
 
+# Kategori makanan untuk ditampilkan di halaman Favorit.
+# CSV gizi tidak punya kolom kategori, jadi dipetakan dari nama makanan.
+_FOOD_CATEGORIES = {
+    "bakso": "Makanan Utama", "burger": "Makanan Utama", "mie goreng": "Makanan Utama",
+    "nasi goreng": "Makanan Utama", "nasi putih": "Makanan Utama",
+    "pempek": "Makanan Utama", "pizza": "Makanan Utama",
+    "spaghetti": "Makanan Utama", "sate": "Makanan Utama",
+
+    "ayam goreng": "Lauk Protein", "ikan goreng": "Lauk Protein",
+    "nugget": "Lauk Protein", "rendang sapi": "Lauk Protein", "steak": "Lauk Protein",
+    "tahu": "Lauk Protein", "tempe": "Lauk Protein",
+    "telur goreng": "Lauk Protein", "telur rebus": "Lauk Protein",
+
+    "capcay": "Sayuran", "terong balado": "Sayuran", "tumis kangkung": "Sayuran",
+
+    "apple": "Buah", "banana": "Buah", "kiwi": "Buah",
+    "pineapples": "Buah", "strawberry": "Buah",
+
+    "chocolate chip cookie": "Camilan", "donat": "Camilan", "kentang goreng": "Camilan",
+}
+
+def get_food_category(food_name: str) -> str:
+    return _FOOD_CATEGORIES.get(food_name.strip().lower(), "Lainnya")
+
 def get_nutrition(food_name: str):
     # UBAH NAMA DARI YOLO JADI HURUF KECIL SAAT MENCARI
     kunci_pencarian = food_name.strip().lower()

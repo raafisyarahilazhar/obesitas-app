@@ -4,6 +4,7 @@ import '../theme/app_colors.dart';
 import '../pages/dashboard_page.dart';
 import '../pages/history_page.dart';
 import '../pages/scanner_page.dart';
+import '../pages/favorite_page.dart';
 import '../pages/profile_page.dart';
 
 class MainShell extends StatefulWidget {
@@ -50,6 +51,7 @@ class _MainShellState extends State<MainShell> with SingleTickerProviderStateMix
     final pages = [
       DashboardPage(userId: widget.userId),
       HistoryPage(userId: widget.userId),
+      FavoritePage(userId: widget.userId),
       ProfilePage(userId: widget.userId),
     ];
 
@@ -118,15 +120,15 @@ class _MainShellState extends State<MainShell> with SingleTickerProviderStateMix
                   icon: Icons.favorite_rounded,
                   iconOutlined: Icons.favorite_outline_rounded,
                   label: "Favorit",
-                  isActive: false,
-                  onTap: () {},
+                  isActive: _currentIndex == 2,
+                  onTap: () => setState(() => _currentIndex = 2),
                 ),
                 _NavItem(
                   icon: Icons.person_rounded,
                   iconOutlined: Icons.person_outline_rounded,
                   label: "Profil",
-                  isActive: _currentIndex == 2,
-                  onTap: () => setState(() => _currentIndex = 2),
+                  isActive: _currentIndex == 3,
+                  onTap: () => setState(() => _currentIndex = 3),
                 ),
               ],
           ),

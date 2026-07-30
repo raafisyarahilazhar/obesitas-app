@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../widgets/primary_button.dart';
-import '../widgets/main_shell.dart';
 import '../theme/app_colors.dart';
-import 'onboarding_page.dart';
+import 'email_verification_page.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -14,33 +13,68 @@ class RegisterPage extends StatefulWidget {
 
 class _RegisterPageState extends State<RegisterPage> {
   final TextEditingController _userController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passController = TextEditingController();
   bool _isLoading = false;
   bool _obscurePass = true;
 
+  static final RegExp _emailRegex = RegExp(r'^[\w.+-]+@[\w-]+\.[\w.-]+$');
+
+  @override
+  void dispose() {
+    _userController.dispose();
+    _emailController.dispose();
+    _passController.dispose();
+    super.dispose();
+  }
+
   void _register() async {
-    if (_userController.text.isEmpty || _passController.text.isEmpty) return;
+    final username = _userController.text.trim();
+    final email = _emailController.text.trim().toLowerCase();
+
+    if (username.isEmpty || email.isEmpty || _passController.text.isEmpty) {
+      _showError("Lengkapi username, email, dan kata sandi");
+      return;
+    }
+    if (!_emailRegex.hasMatch(email)) {
+      _showError("Format email tidak valid");
+      return;
+    }
+
     setState(() => _isLoading = true);
     try {
-      final int newUserId =
-          await ApiService.register(_userController.text.trim(), _passController.text);
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => OnboardingPage(userId: newUserId)),
-        );
+      final result = await ApiService.register(username, email, _passController.text);
+      if (!mounted) return;
+
+      if (result['email_sent'] == false) {
+        _showError("Akun dibuat, tapi email gagal dikirim. Coba tombol Kirim Ulang.");
       }
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => EmailVerificationPage(
+            email: result['email'] ?? email,
+            resendCooldown: result['resend_cooldown'] ?? 60,
+          ),
+        ),
+      );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(e.toString().replaceAll("Exception: ", "")),
-        backgroundColor: AppColors.danger,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      ));
+      _showError(e.toString().replaceAll("Exception: ", ""));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(message),
+      backgroundColor: AppColors.danger,
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+    ));
   }
 
   @override
@@ -125,8 +159,33 @@ class _RegisterPageState extends State<RegisterPage> {
                               _buildField("Username", "Buat username",
                                   Icons.person_add_outlined, _userController, false),
                               const SizedBox(height: 16),
+                              _buildField("Email", "contoh@email.com",
+                                  Icons.email_outlined, _emailController, false,
+                                  keyboardType: TextInputType.emailAddress),
+                              const SizedBox(height: 16),
                               _buildField("Password", "Buat kata sandi",
                                   Icons.lock_outline_rounded, _passController, true),
+
+                              const SizedBox(height: 14),
+
+                              const Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(Icons.info_outline_rounded,
+                                      color: AppColors.textSub, size: 15),
+                                  SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      "Kami akan mengirim kode verifikasi 6 digit ke email Anda.",
+                                      style: TextStyle(
+                                        color: AppColors.textSub,
+                                        fontSize: 12,
+                                        height: 1.5,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
 
                               const SizedBox(height: 28),
 
@@ -151,7 +210,8 @@ class _RegisterPageState extends State<RegisterPage> {
   }
 
   Widget _buildField(String label, String hint, IconData icon,
-      TextEditingController ctrl, bool isPass) {
+      TextEditingController ctrl, bool isPass,
+      {TextInputType? keyboardType}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -173,6 +233,7 @@ class _RegisterPageState extends State<RegisterPage> {
           child: TextField(
             controller: ctrl,
             obscureText: isPass && _obscurePass,
+            keyboardType: keyboardType,
             style: const TextStyle(color: AppColors.textPri, fontSize: 15),
             decoration: InputDecoration(
               hintText: hint,

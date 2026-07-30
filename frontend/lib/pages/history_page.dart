@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+
 import '../services/api_service.dart';
 import '../theme/app_colors.dart';
+import '../widgets/empty_state_box.dart';
+import 'scanner_page.dart';
 
 class HistoryPage extends StatefulWidget {
   final int userId;
@@ -11,291 +14,356 @@ class HistoryPage extends StatefulWidget {
 }
 
 class _HistoryPageState extends State<HistoryPage> {
-  List<dynamic> history = [];
-  bool isLoading = true;
+  List<dynamic> _items = [];
+  Map<String, dynamic> _summary = {};
+  bool _isLoading = true;
+  late DateTime _selectedDate;
 
   @override
   void initState() {
     super.initState();
-    _fetchHistory();
+    _selectedDate = _dateOnly(DateTime.now());
+    _fetch();
   }
 
-  Future<void> _fetchHistory() async {
+  static DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  bool get _isToday => _selectedDate == _dateOnly(DateTime.now());
+  bool get _isYesterday =>
+      _selectedDate ==
+      _dateOnly(DateTime.now().subtract(const Duration(days: 1)));
+
+  Future<void> _fetch() async {
+    setState(() => _isLoading = true);
     try {
-      final data = await ApiService.getDashboard(widget.userId);
+      final res = await ApiService.getMealHistory(widget.userId, date: _selectedDate);
+      if (!mounted) return;
       setState(() {
-        history   = data['meals_history_today'] ?? [];
-        isLoading = false;
+        _items = res['items'] ?? [];
+        _summary = Map<String, dynamic>.from(res['summary'] ?? {});
+        _isLoading = false;
       });
     } catch (e) {
-      setState(() => isLoading = false);
+      if (!mounted) return;
+      setState(() {
+        _items = [];
+        _isLoading = false;
+      });
     }
   }
 
-  Map<String, List<Map<String, dynamic>>> _groupHistoryByMealTime() {
-    Map<String, List<Map<String, dynamic>>> grouped = {
-      "Sarapan (06:00 - 10:30)": [],
-      "Makan Siang (11:00 - 15:00)": [],
-      "Selingan Sore (15:00 - 18:00)": [],
-      "Makan Malam (18:00 - 22:00)": [],
-      "Lainnya": [],
-    };
-
-    for (var item in history) {
-      final timeString = item['time'] as String;
-      try {
-        final parts = timeString.split(':');
-        final hour  = int.parse(parts[0]);
-        if      (hour >= 6  && hour < 11) grouped["Sarapan (06:00 - 10:30)"]!.add(item);
-        else if (hour >= 11 && hour < 15) grouped["Makan Siang (11:00 - 15:00)"]!.add(item);
-        else if (hour >= 15 && hour < 18) grouped["Selingan Sore (15:00 - 18:00)"]!.add(item);
-        else if (hour >= 18 && hour < 22) grouped["Makan Malam (18:00 - 22:00)"]!.add(item);
-        else                              grouped["Lainnya"]!.add(item);
-      } catch (_) {
-        grouped["Lainnya"]!.add(item);
-      }
-    }
-
-    grouped.removeWhere((key, value) => value.isEmpty);
-    return grouped;
+  void _pilihTanggal(DateTime date) {
+    setState(() => _selectedDate = _dateOnly(date));
+    _fetch();
   }
+
+  Future<void> _bukaKalender() async {
+    final DateTime? dipilih = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(2024),
+      lastDate: DateTime.now(),
+      helpText: "Pilih tanggal riwayat",
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: const ColorScheme.light(
+            primary: AppColors.accent,
+            onPrimary: Colors.white,
+            surface: AppColors.card,
+            onSurface: AppColors.textPri,
+          ),
+        ),
+        child: child!,
+      ),
+    );
+    if (dipilih != null) _pilihTanggal(dipilih);
+  }
+
+  void _openScanner() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => ScannerPage(userId: widget.userId)),
+    ).then((_) => _fetch());
+  }
+
+  double _num(dynamic v) => (v is num) ? v.toDouble() : 0.0;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bg,
-      body: CustomScrollView(
-        slivers: [
-          // ── App Bar ──────────────────────────────────
-          SliverToBoxAdapter(
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(24, 56, 24, 24),
-              decoration: const BoxDecoration(
-                gradient: AppColors.heroBg,
-                borderRadius: BorderRadius.only(
-                  bottomLeft: Radius.circular(36),
-                  bottomRight: Radius.circular(36),
+      body: RefreshIndicator(
+        onRefresh: _fetch,
+        color: AppColors.accent,
+        backgroundColor: AppColors.card,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverToBoxAdapter(child: _buildHeader()),
+
+            // ── Ringkasan Harian ─────────────────────────
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 18, 24, 0),
+                child: _buildSummaryCard(),
+              ),
+            ),
+
+            // ── Filter Tanggal ───────────────────────────
+            const SliverToBoxAdapter(child: _SectionTitle("Filter Tanggal")),
+            SliverToBoxAdapter(child: _buildDateFilter()),
+
+            // ── Daftar riwayat ───────────────────────────
+            SliverToBoxAdapter(child: _SectionTitle(_judulRiwayat())),
+
+            if (_isLoading)
+              const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 50),
+                  child: Center(
+                    child: CircularProgressIndicator(
+                        color: AppColors.accent, strokeWidth: 2),
+                  ),
+                ),
+              )
+            else if (_items.isEmpty)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+                  child: EmptyStateBox(
+                    icon: Icons.history_toggle_off_rounded,
+                    title: _isToday
+                        ? "Belum ada riwayat hari ini"
+                        : "Tidak ada riwayat di tanggal ini",
+                    message: _isToday
+                        ? "Scan makananmu untuk mulai mencatat konsumsi harian."
+                        : "Coba pilih tanggal lain, atau scan makanan untuk mencatat hari ini.",
+                    buttonLabel: "Scan Makanan",
+                    onButtonTap: _openScanner,
+                  ),
+                ),
+              )
+            else
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, i) => _HistoryCard(
+                        item: Map<String, dynamic>.from(_items[i])),
+                    childCount: _items.length,
+                  ),
                 ),
               ),
-              child: Row(
-                children: [
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "Riwayat Makan",
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 22,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          "Semua catatan makanan hari ini",
-                          style: TextStyle(color: Colors.white70, fontSize: 13),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (!isLoading && history.isNotEmpty)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        "${history.length} item",
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
 
-          // ── Body ─────────────────────────────────────
-          if (isLoading)
-            const SliverFillRemaining(
-              child: Center(
-                child: CircularProgressIndicator(color: AppColors.accent, strokeWidth: 2),
-              ),
-            )
-          else if (history.isEmpty)
-            SliverFillRemaining(child: _buildEmptyState())
-          else
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(24, 8, 24, 100),
-              sliver: SliverList(
-                delegate: SliverChildListDelegate(_buildGroupedItems()),
-              ),
-            ),
-        ],
+            const SliverToBoxAdapter(child: SizedBox(height: 100)),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(28),
-            decoration: BoxDecoration(
-              color: AppColors.accentLight,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.history_toggle_off_rounded, size: 44, color: AppColors.accent),
-          ),
-          const SizedBox(height: 20),
-          const Text(
-            "Belum ada riwayat hari ini",
-            style: TextStyle(color: AppColors.textPri, fontSize: 16, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            "Scan makananmu untuk mulai mencatat",
-            style: TextStyle(color: AppColors.textSub, fontSize: 13),
-          ),
-        ],
-      ),
-    );
+  String _judulRiwayat() {
+    if (_isToday) return "Riwayat Hari Ini";
+    if (_isYesterday) return "Riwayat Kemarin";
+    return "Riwayat ${_tanggalPanjang(_selectedDate)}";
   }
 
-  List<Widget> _buildGroupedItems() {
-    final groupedData = _groupHistoryByMealTime();
-    List<Widget> items = [];
-
-    groupedData.forEach((categoryName, entries) {
-      // ── Group Header ────────────────────────────
-      items.add(
-        Padding(
-          padding: const EdgeInsets.fromLTRB(0, 20, 0, 12),
-          child: Row(
-            children: [
-              Container(
-                width: 4,
-                height: 16,
-                decoration: BoxDecoration(
-                  color: AppColors.accent,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                categoryName.toUpperCase(),
-                style: const TextStyle(
-                  color: AppColors.textSub,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.2,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-
-      int totalCaloriesPerSession = 0;
-      for (var item in entries) {
-        items.add(_buildHistoryCard(item));
-        totalCaloriesPerSession += (int.tryParse("${item['calories']}") ?? 0);
-      }
-
-      items.add(
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8, top: 4),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                decoration: BoxDecoration(
-                  color: AppColors.accentLight,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  "Total sesi: $totalCaloriesPerSession kcal",
-                  style: const TextStyle(
-                    color: AppColors.accent,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    });
-
-    return items;
-  }
-
-  Widget _buildHistoryCard(Map<String, dynamic> item) {
-    final int calories   = int.tryParse("${item['calories']}") ?? 0;
-    final bool isHigh    = calories > 400;
-    final Color calColor = isHigh
-        ? AppColors.danger
-        : calories > 200
-            ? AppColors.warning
-            : AppColors.success;
-
+  // ── Header ──────────────────────────────────────────────────────
+  Widget _buildHeader() {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: isHigh ? AppColors.danger.withOpacity(0.3) : AppColors.border),
-        boxShadow: [
-          BoxShadow(color: AppColors.shadow, blurRadius: 12, offset: const Offset(0, 2)),
-        ],
+      padding: const EdgeInsets.fromLTRB(24, 56, 24, 26),
+      decoration: const BoxDecoration(
+        gradient: AppColors.heroBg,
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(36),
+          bottomRight: Radius.circular(36),
+        ),
       ),
-      child: Column(
+      child: Row(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-            child: Row(
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Riwayat Makan",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 26,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  "Semua catatan makanan hari ini",
+                  style: TextStyle(color: Colors.white70, fontSize: 13),
+                ),
+              ],
+            ),
+          ),
+
+          // Tombol Filter / Kalender
+          GestureDetector(
+            onTap: _bukaKalender,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  width: 48,
-                  height: 48,
+                  width: 44,
+                  height: 44,
                   decoration: BoxDecoration(
-                    color: AppColors.accentLight,
-                    borderRadius: BorderRadius.circular(14),
+                    color: Colors.white.withOpacity(0.2),
+                    shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.restaurant_rounded, color: AppColors.accent, size: 22),
+                  child: const Icon(Icons.calendar_month_rounded,
+                      color: Colors.white, size: 20),
                 ),
-                const SizedBox(width: 14),
+                const SizedBox(height: 4),
+                const Text(
+                  "Filter / Kalender",
+                  style: TextStyle(color: Colors.white70, fontSize: 9),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Kartu Ringkasan Harian ──────────────────────────────────────
+  Widget _buildSummaryCard() {
+    final double target = _num(_summary['calories_target']);
+    final double masuk = _num(_summary['calories_consumed']);
+    final double aman = target > 0 ? target : 1;
+    final double progress = (masuk / aman).clamp(0.0, 1.0);
+    final int persen = (progress * 100).round();
+    final bool lebih = target > 0 && masuk > target;
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: AppColors.border),
+        boxShadow: const [
+          BoxShadow(color: AppColors.shadow, blurRadius: 14, offset: Offset(0, 3)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            "Ringkasan Harian",
+            style: TextStyle(
+              color: AppColors.textPri,
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Kiri: kalori
                 Expanded(
+                  flex: 5,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        item['food_name'].toString().toUpperCase(),
-                        style: const TextStyle(
-                          color: AppColors.textPri,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
+                      const Text("Kalori Hari Ini",
+                          style: TextStyle(color: AppColors.textSub, fontSize: 11)),
+                      const SizedBox(height: 8),
                       Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          const Icon(Icons.access_time_rounded, size: 11, color: AppColors.textSub),
+                          Flexible(
+                            child: Text(
+                              _ribuan(masuk),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: lebih ? AppColors.danger : AppColors.textPri,
+                                fontSize: 28,
+                                fontWeight: FontWeight.w800,
+                                height: 1,
+                              ),
+                            ),
+                          ),
                           const SizedBox(width: 4),
-                          Text(
-                            "${item['time']}  •  ${item['weight_grams']}g",
-                            style: const TextStyle(color: AppColors.textSub, fontSize: 12),
+                          const Padding(
+                            padding: EdgeInsets.only(bottom: 2),
+                            child: Text("kcal",
+                                style: TextStyle(
+                                    color: AppColors.textSub, fontSize: 12)),
                           ),
                         ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        "dari ${_ribuan(target)} kcal",
+                        style: const TextStyle(
+                            color: AppColors.textSub, fontSize: 12),
+                      ),
+                      const SizedBox(height: 12),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: progress,
+                          minHeight: 7,
+                          backgroundColor: AppColors.bg,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                              lebih ? AppColors.danger : AppColors.accent),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        "$persen% target tercapai",
+                        style: TextStyle(
+                          color: lebih ? AppColors.danger : AppColors.textSub,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(width: 16),
+                const VerticalDivider(color: AppColors.border, width: 1),
+                const SizedBox(width: 16),
+
+                // Kanan: makronutrien
+                Expanded(
+                  flex: 6,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text("Nutrisi Hari Ini",
+                          style: TextStyle(color: AppColors.textSub, fontSize: 11)),
+                      const SizedBox(height: 10),
+                      _NutrientRow(
+                        label: "Protein",
+                        consumed: _num(_summary['protein_consumed']),
+                        target: _num(_summary['protein_target']),
+                        color: AppColors.info,
+                      ),
+                      const SizedBox(height: 10),
+                      _NutrientRow(
+                        label: "Karbohidrat / Gula",
+                        consumed: _num(_summary['carbs_consumed']),
+                        target: _num(_summary['carbs_target']),
+                        color: AppColors.warning,
+                      ),
+                      const SizedBox(height: 10),
+                      _NutrientRow(
+                        label: "Lemak",
+                        consumed: _num(_summary['fat_consumed']),
+                        target: _num(_summary['fat_target']),
+                        color: AppColors.success,
                       ),
                     ],
                   ),
@@ -303,21 +371,345 @@ class _HistoryPageState extends State<HistoryPage> {
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
 
+  // ── Filter tanggal ──────────────────────────────────────────────
+  Widget _buildDateFilter() {
+    final DateTime hariIni = _dateOnly(DateTime.now());
+    final DateTime kemarin = hariIni.subtract(const Duration(days: 1));
+    final bool tanggalLain = !_isToday && !_isYesterday;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Row(
+        children: [
+          Expanded(
+            child: _FilterChip(
+              icon: Icons.today_rounded,
+              label: "Hari Ini",
+              isActive: _isToday,
+              onTap: () => _pilihTanggal(hariIni),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: _FilterChip(
+              icon: Icons.history_rounded,
+              label: "Kemarin",
+              isActive: _isYesterday,
+              onTap: () => _pilihTanggal(kemarin),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: _FilterChip(
+              icon: Icons.calendar_month_rounded,
+              label: tanggalLain ? _tanggalPendek(_selectedDate) : "Pilih Tanggal",
+              isActive: tanggalLain,
+              onTap: _bukaKalender,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Format angka & tanggal ─────────────────────────────────────────────────────
+/// 1250 -> "1.250" (pemisah ribuan gaya Indonesia)
+String _ribuan(double v) {
+  final String angka =
+      v == v.roundToDouble() ? v.round().toString() : v.toStringAsFixed(1);
+  final List<String> bagian = angka.split('.');
+  final String bulat = bagian[0];
+
+  final buffer = StringBuffer();
+  for (int i = 0; i < bulat.length; i++) {
+    if (i > 0 && (bulat.length - i) % 3 == 0) buffer.write('.');
+    buffer.write(bulat[i]);
+  }
+  return bagian.length > 1 ? "${buffer.toString()},${bagian[1]}" : buffer.toString();
+}
+
+String _angka(double v) =>
+    v == v.roundToDouble() ? v.round().toString() : v.toStringAsFixed(1);
+
+const List<String> _namaBulan = [
+  "Jan", "Feb", "Mar", "Apr", "Mei", "Jun",
+  "Jul", "Agu", "Sep", "Okt", "Nov", "Des"
+];
+
+String _tanggalPendek(DateTime d) => "${d.day} ${_namaBulan[d.month - 1]}";
+String _tanggalPanjang(DateTime d) =>
+    "${d.day} ${_namaBulan[d.month - 1]} ${d.year}";
+
+// ── Judul section ──────────────────────────────────────────────────────────────
+class _SectionTitle extends StatelessWidget {
+  final String text;
+  const _SectionTitle(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: AppColors.textPri,
+          fontSize: 16,
+          fontWeight: FontWeight.w800,
+          letterSpacing: -0.2,
+        ),
+      ),
+    );
+  }
+}
+
+// ── Baris makronutrien di kartu ringkasan ──────────────────────────────────────
+class _NutrientRow extends StatelessWidget {
+  final String label;
+  final double consumed;
+  final double target;
+  final Color color;
+
+  const _NutrientRow({
+    required this.label,
+    required this.consumed,
+    required this.target,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final double aman = target > 0 ? target : 1;
+    final double progress = (consumed / aman).clamp(0.0, 1.0);
+    final int persen = (progress * 100).round();
+    final bool lebih = target > 0 && consumed > target;
+    final Color warna = lebih ? AppColors.danger : color;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppColors.textPri,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              "${_angka(consumed)} g",
+              style: TextStyle(
+                color: warna,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 5),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(3),
+          child: LinearProgressIndicator(
+            value: progress,
+            minHeight: 5,
+            backgroundColor: AppColors.bg,
+            valueColor: AlwaysStoppedAnimation<Color>(warna),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Align(
+          alignment: Alignment.centerRight,
+          child: Text(
+            "$persen% / ${_angka(target)} g",
+            style: const TextStyle(color: AppColors.textSub, fontSize: 9),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Chip filter tanggal ────────────────────────────────────────────────────────
+class _FilterChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  const _FilterChip({
+    required this.icon,
+    required this.label,
+    required this.isActive,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+        decoration: BoxDecoration(
+          color: isActive ? AppColors.accentLight : AppColors.card,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isActive ? AppColors.accent : AppColors.border,
+            width: 1.5,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon,
+                size: 15, color: isActive ? AppColors.accent : AppColors.textSub),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: isActive ? AppColors.accent : AppColors.textSub,
+                  fontSize: 12,
+                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Kartu satu catatan makan ───────────────────────────────────────────────────
+class _HistoryCard extends StatelessWidget {
+  final Map<String, dynamic> item;
+  const _HistoryCard({required this.item});
+
+  double _n(dynamic v) => (v is num) ? v.toDouble() : 0.0;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.border),
+        boxShadow: const [
+          BoxShadow(color: AppColors.shadow, blurRadius: 12, offset: Offset(0, 2)),
+        ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Thumbnail
           Container(
-            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            padding: const EdgeInsets.symmetric(vertical: 14),
+            width: 52,
+            height: 52,
             decoration: BoxDecoration(
-              color: AppColors.bg,
+              color: AppColors.accentLight,
               borderRadius: BorderRadius.circular(14),
             ),
-            child: Row(
+            child: const Icon(Icons.restaurant_rounded,
+                color: AppColors.accent, size: 24),
+          ),
+          const SizedBox(width: 12),
+
+          // Nama, jam, berat
+          Expanded(
+            flex: 5,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _nutriStat("Kalori", "${item['calories']}", "kcal", calColor),
-                _divider(),
-                _nutriStat("Karbo", "${item['carbs'] ?? 0}", "gram", AppColors.warning),
-                _divider(),
-                _nutriStat("Status", "Tercatat", "", AppColors.success),
+                Text(
+                  (item['food_name'] ?? '-').toString(),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.textPri,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    const Icon(Icons.schedule_rounded,
+                        size: 12, color: AppColors.textSub),
+                    const SizedBox(width: 4),
+                    Text(
+                      "${item['time'] ?? '-'} WIB",
+                      style: const TextStyle(
+                          color: AppColors.textSub, fontSize: 11),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Row(
+                  children: [
+                    const Icon(Icons.scale_outlined,
+                        size: 12, color: AppColors.textSub),
+                    const SizedBox(width: 4),
+                    Text(
+                      "${_angka(_n(item['weight_grams']))} gram",
+                      style: const TextStyle(
+                          color: AppColors.textSub, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+
+          // Kalori + rincian gizi
+          Expanded(
+            flex: 4,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        _ribuan(_n(item['calories'])),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppColors.accent,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          height: 1,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 3),
+                    const Text("kcal",
+                        style: TextStyle(color: AppColors.textSub, fontSize: 10)),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                _MacroLine(label: "Protein", value: _n(item['protein'])),
+                _MacroLine(label: "Karbohidrat", value: _n(item['carbs'])),
+                _MacroLine(label: "Lemak", value: _n(item['fat'])),
               ],
             ),
           ),
@@ -325,39 +717,39 @@ class _HistoryPageState extends State<HistoryPage> {
       ),
     );
   }
+}
 
-  Widget _nutriStat(String label, String value, String unit, Color color) {
-    return Expanded(
-      child: Column(
+class _MacroLine extends StatelessWidget {
+  final String label;
+  final double value;
+  const _MacroLine({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          RichText(
-            text: TextSpan(
-              text: value,
-              style: TextStyle(color: color, fontWeight: FontWeight.w800, fontSize: 16),
-              children: unit.isNotEmpty
-                  ? [
-                      TextSpan(
-                        text: " $unit",
-                        style: const TextStyle(
-                          color: AppColors.textSub,
-                          fontSize: 10,
-                          fontWeight: FontWeight.normal,
-                        ),
-                      )
-                    ]
-                  : null,
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: AppColors.textSub, fontSize: 10),
             ),
           ),
-          const SizedBox(height: 4),
-          Text(label, style: const TextStyle(color: AppColors.textSub, fontSize: 11)),
+          const SizedBox(width: 6),
+          Text(
+            "${_angka(value)} g",
+            style: const TextStyle(
+              color: AppColors.textPri,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
         ],
       ),
     );
   }
-
-  Widget _divider() => Container(
-        width: 1,
-        height: 32,
-        color: AppColors.border,
-      );
 }

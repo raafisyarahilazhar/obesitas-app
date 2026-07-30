@@ -15,6 +15,7 @@ class _DashboardPageState extends State<DashboardPage> {
   Map<String, dynamic>? data;
   List<dynamic>? mealPlan;
   bool _isLoadingPlan = false;
+  bool _bmiExpanded = false;
 
   @override
   void initState() {
@@ -52,6 +53,9 @@ class _DashboardPageState extends State<DashboardPage> {
     }
   }
 
+  double _num(dynamic v, [double fallback = 0]) =>
+      (v is num) ? v.toDouble() : fallback;
+
   @override
   Widget build(BuildContext context) {
     if (data == null) {
@@ -61,191 +65,344 @@ class _DashboardPageState extends State<DashboardPage> {
       );
     }
 
-    // PENCEGAHAN ERROR: Pastikan variabel tidak null
-    final user    = data!['user'] ?? {};
+    final user = data!['user'] ?? {};
     final summary = data!['today_summary'] ?? {};
+
+    final double kaloriTarget = _num(summary['calories_target'], 0);
+    final double kaloriMasuk = _num(summary['calories_consumed']);
 
     return Scaffold(
       backgroundColor: AppColors.bg,
-      body: CustomScrollView(
-        slivers: [
-          // ── Hero Header ──────────────────────────────
-          SliverToBoxAdapter(
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(24, 56, 24, 32),
-              decoration: const BoxDecoration(
-                gradient: AppColors.heroBg,
-                borderRadius: BorderRadius.only(
-                  bottomLeft: Radius.circular(36),
-                  bottomRight: Radius.circular(36),
-                ),
+      body: RefreshIndicator(
+        onRefresh: () async {
+          _fetch();
+          _fetchMealPlan();
+        },
+        color: AppColors.accent,
+        backgroundColor: AppColors.card,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            // ── Header: sapaan + notifikasi ──────────────
+            SliverToBoxAdapter(child: _buildHeader(user)),
+
+            // ── Chip Status BMI ──────────────────────────
+            SliverToBoxAdapter(child: _buildBmiChip(user)),
+
+            // ── Kartu Kalori Hari Ini ────────────────────
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 18, 24, 0),
+                child: _buildCalorieCard(kaloriMasuk, kaloriTarget),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              "Halo, ${user['name'] ?? 'Pengguna'} 👋", // Fallback jika nama kosong
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 22,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                user['status'] ?? 'Menunggu Data', // Fallback status
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.notifications_outlined, color: Colors.white, size: 22),
-                      ),
-                    ],
+            ),
+
+            // ── Ringkasan Hari Ini ───────────────────────
+            const SliverToBoxAdapter(child: _SectionTitle("Ringkasan Hari Ini")),
+
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              sliver: SliverGrid(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 14,
+                  crossAxisSpacing: 14,
+                  mainAxisExtent: 162,
+                ),
+                delegate: SliverChildListDelegate([
+                  _StatCard(
+                    label: "Kalori Dikonsumsi",
+                    consumed: kaloriMasuk,
+                    target: kaloriTarget,
+                    unit: "kcal",
+                    icon: Icons.local_fire_department_rounded,
+                    color: AppColors.accent,
                   ),
+                  _StatCard(
+                    label: "Karbohidrat / Gula",
+                    consumed: _num(summary['carbs_consumed']),
+                    target: _num(summary['carbs_target']),
+                    unit: "g",
+                    icon: Icons.water_drop_rounded,
+                    color: AppColors.warning,
+                  ),
+                  _StatCard(
+                    label: "Protein",
+                    consumed: _num(summary['protein_consumed']),
+                    target: _num(summary['protein_target']),
+                    unit: "g",
+                    icon: Icons.egg_alt_outlined,
+                    color: AppColors.info,
+                  ),
+                  _StatCard(
+                    label: "Lemak",
+                    consumed: _num(summary['fat_consumed']),
+                    target: _num(summary['fat_target']),
+                    unit: "g",
+                    icon: Icons.opacity_rounded,
+                    color: AppColors.success,
+                  ),
+                ]),
+              ),
+            ),
 
-                  const SizedBox(height: 24),
+            // ── Rekomendasi Jadwal Makan ─────────────────
+            const SliverToBoxAdapter(child: _SectionTitle("Rekomendasi Jadwal Makan")),
 
-                  // ── Quick Calorie Summary ────────────
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.white.withOpacity(0.2)),
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              sliver: _buildMealPlanSection(),
+            ),
+
+            const SliverToBoxAdapter(child: SizedBox(height: 100)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Header ──────────────────────────────────────────────────────
+  Widget _buildHeader(Map user) {
+    final String nama = (user['name'] ?? 'Pengguna').toString();
+    final String inisial = nama.trim().isEmpty ? "?" : nama.trim()[0].toUpperCase();
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(24, 56, 24, 28),
+      decoration: const BoxDecoration(
+        gradient: AppColors.heroBg,
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(36),
+          bottomRight: Radius.circular(36),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Avatar inisial
+          Container(
+            width: 46,
+            height: 46,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white.withOpacity(0.35), width: 1.5),
+            ),
+            child: Text(
+              inisial,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          const SizedBox(width: 14),
+
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Halo, $nama",
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  "Tetap semangat capai target kalori harianmu!",
+                  style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.4),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+
+          // Tombol notifikasi
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.notifications_outlined,
+                    color: Colors.white, size: 20),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                "Notifikasi",
+                style: TextStyle(color: Colors.white70, fontSize: 9),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Chip Status BMI (bisa dibuka) ───────────────────────────────
+  Widget _buildBmiChip(Map user) {
+    final String status = (user['status'] ?? 'Menunggu Data').toString();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 18, 24, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GestureDetector(
+            onTap: () => setState(() => _bmiExpanded = !_bmiExpanded),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.card,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: AppColors.border, width: 1.5),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    "Status BMI",
+                    style: TextStyle(
+                      color: AppColors.textSub,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
                     ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text("Kalori Hari Ini",
-                                  style: TextStyle(color: Colors.white70, fontSize: 12)),
-                              const SizedBox(height: 4),
-                              Text(
-                                "${summary['calories_consumed'] ?? 0}", // Fallback 0
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 32,
-                                  fontWeight: FontWeight.w800,
-                                  height: 1,
-                                ),
-                              ),
-                              Text(
-                                "dari ${summary['calories_target'] ?? 0} kcal",
-                                style: const TextStyle(color: Colors.white60, fontSize: 12),
-                              ),
-                            ],
-                          ),
-                        ),
-                        _CircleProgress(
-                          // PENCEGAHAN ERROR: Safe casting (int/double) & Mencegah NaN
-                          consumed: (summary['calories_consumed'] as num?)?.toDouble() ?? 0.0,
-                          target: (summary['calories_target'] as num?)?.toDouble() ?? 1.0,
-                        ),
-                      ],
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    status,
+                    style: const TextStyle(
+                      color: AppColors.textPri,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
                     ),
+                  ),
+                  const SizedBox(width: 6),
+                  AnimatedRotation(
+                    turns: _bmiExpanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: const Icon(Icons.keyboard_arrow_down_rounded,
+                        color: AppColors.textSub, size: 20),
                   ),
                 ],
               ),
             ),
           ),
 
-          // ── Section Label ────────────────────────────
-          const SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(24, 28, 24, 14),
-              child: Text(
-                "RINGKASAN HARI INI",
-                style: TextStyle(
-                  color: AppColors.textSub,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.4,
-                ),
+          // Detail BMI muncul saat chip ditekan
+          if (_bmiExpanded)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(top: 10),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.card,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _MiniStat(label: "BMI", value: "${user['bmi'] ?? '-'}"),
+                  _MiniStat(label: "Tinggi", value: "${user['height_cm'] ?? '-'} cm"),
+                  _MiniStat(label: "Berat", value: "${user['weight_kg'] ?? '-'} kg"),
+                  _MiniStat(label: "Umur", value: "${user['age'] ?? '-'} th"),
+                ],
               ),
             ),
-          ),
-
-          // ── Stat Cards ───────────────────────────────
-          SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            sliver: SliverList(
-              delegate: SliverChildListDelegate([
-                _StatCard(
-                  label: "Kalori Dikonsumsi",
-                  consumed: summary['calories_consumed'] ?? 0,
-                  target: summary['calories_target'] ?? 1, // Cegah bagi 0
-                  unit: "kcal",
-                  icon: Icons.local_fire_department_rounded,
-                  color: AppColors.accent,
-                ),
-                const SizedBox(height: 14),
-                _StatCard(
-                  label: "Karbo / Gula",
-                  consumed: summary['sugar_consumed'] ?? 0,
-                  target: summary['sugar_target'] ?? 150,
-                  unit: "gram",
-                  icon: Icons.water_drop_rounded,
-                  color: const Color(0xFFF57C00),
-                ),
-              ]),
-            ),
-          ),
-
-          // ── Section Label (Meal Plan) ────────────────
-          const SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(24, 28, 24, 14),
-              child: Text(
-                "REKOMENDASI JADWAL MAKAN",
-                style: TextStyle(
-                  color: AppColors.textSub,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.4,
-                ),
-              ),
-            ),
-          ),
-
-          // ── Meal Plan ────────────────────────────────
-          SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            sliver: _buildMealPlanSection(),
-          ),
-
-          const SliverToBoxAdapter(child: SizedBox(height: 100)),
         ],
       ),
     );
   }
 
+  // ── Kartu Kalori Hari Ini ───────────────────────────────────────
+  Widget _buildCalorieCard(double masuk, double target) {
+    final double aman = target > 0 ? target : 1;
+    final double progress = (masuk / aman).clamp(0.0, 1.0);
+    final int persen = (progress * 100).round();
+    final bool lebih = target > 0 && masuk > target;
+
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.border),
+        boxShadow: const [
+          BoxShadow(color: AppColors.shadow, blurRadius: 16, offset: Offset(0, 4)),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Kalori Hari Ini",
+                  style: TextStyle(
+                    color: AppColors.textPri,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        _fmt(masuk),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: lebih ? AppColors.danger : AppColors.textPri,
+                          fontSize: 36,
+                          fontWeight: FontWeight.w800,
+                          height: 1,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 5),
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 3),
+                      child: Text("kcal",
+                          style: TextStyle(color: AppColors.textSub, fontSize: 13)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  "dari ${_fmt(target)} kcal",
+                  style: const TextStyle(color: AppColors.textSub, fontSize: 13),
+                ),
+                const SizedBox(height: 2),
+                const Text(
+                  "Target harian",
+                  style: TextStyle(color: AppColors.textSub, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          _CircleProgress(progress: progress, percent: persen, isOver: lebih),
+        ],
+      ),
+    );
+  }
+
+  // ── Jadwal makan ────────────────────────────────────────────────
   Widget _buildMealPlanSection() {
     if (_isLoadingPlan) {
       return const SliverToBoxAdapter(
@@ -273,138 +430,119 @@ class _DashboardPageState extends State<DashboardPage> {
 
     return SliverList(
       delegate: SliverChildBuilderDelegate(
-        (context, index) {
-          final plan = mealPlan![index] ?? {}; // Pencegahan list item null
-          return Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: AppColors.card,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: AppColors.border),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.shadow,
-                  blurRadius: 12,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: AppColors.accentLight,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(Icons.restaurant_rounded,
-                              color: AppColors.accent, size: 16),
-                        ),
-                        const SizedBox(width: 10),
-                        Text(
-                          plan['waktu'] ?? '-',
-                          style: const TextStyle(
-                            color: AppColors.textPri,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: AppColors.accentLight,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        plan['jam'] ?? '-',
-                        style: const TextStyle(
-                          color: AppColors.accent,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  "Target: ${plan['target_kalori'] ?? 0} kcal",
-                  style: const TextStyle(
-                    color: AppColors.accent,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  plan['menu_rekomendasi'] ?? '',
-                  style: const TextStyle(
-                    color: AppColors.textPri,
-                    fontSize: 13,
-                    height: 1.5,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  "Fokus: ${plan['catatan_klinis'] ?? ''}",
-                  style: const TextStyle(
-                    color: AppColors.textSub,
-                    fontSize: 12,
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
+        (context, index) => _MealCard(plan: mealPlan![index] ?? {}),
         childCount: mealPlan!.length,
       ),
     );
   }
 }
 
-// ── Circle Progress ────────────────────────────────────────────────────────────
-class _CircleProgress extends StatelessWidget {
-  final double consumed;
-  final double target;
-  const _CircleProgress({required this.consumed, required this.target});
+/// Angka tanpa ".0" yang mengganggu (2300.0 -> 2300).
+String _fmt(double v) =>
+    v == v.roundToDouble() ? v.round().toString() : v.toStringAsFixed(1);
+
+// ── Judul Section ──────────────────────────────────────────────────────────────
+class _SectionTitle extends StatelessWidget {
+  final String text;
+  const _SectionTitle(this.text);
 
   @override
   Widget build(BuildContext context) {
-    // PENCEGAHAN ERROR: Pembagian dengan 0 
-    final double safeTarget = target > 0 ? target : 1.0;
-    final progress = (consumed / safeTarget).clamp(0.0, 1.0);
-    final pct = (progress * 100).toInt();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 26, 24, 14),
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: AppColors.textPri,
+          fontSize: 16,
+          fontWeight: FontWeight.w800,
+          letterSpacing: -0.2,
+        ),
+      ),
+    );
+  }
+}
+
+// ── Statistik kecil di panel BMI ───────────────────────────────────────────────
+class _MiniStat extends StatelessWidget {
+  final String label;
+  final String value;
+  const _MiniStat({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            color: AppColors.textPri,
+            fontSize: 15,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(label, style: const TextStyle(color: AppColors.textSub, fontSize: 11)),
+      ],
+    );
+  }
+}
+
+// ── Cincin progres kalori ──────────────────────────────────────────────────────
+class _CircleProgress extends StatelessWidget {
+  final double progress;
+  final int percent;
+  final bool isOver;
+
+  const _CircleProgress({
+    required this.progress,
+    required this.percent,
+    required this.isOver,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final Color warna = isOver ? AppColors.danger : AppColors.accent;
 
     return SizedBox(
-      width: 72,
-      height: 72,
+      width: 104,
+      height: 104,
       child: Stack(
         alignment: Alignment.center,
         children: [
-          CircularProgressIndicator(
-            value: progress,
-            strokeWidth: 6,
-            backgroundColor: Colors.white.withOpacity(0.2),
-            valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
-            strokeCap: StrokeCap.round,
-          ),
-          Text(
-            "$pct%",
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 14,
-              fontWeight: FontWeight.w800,
+          SizedBox(
+            width: 104,
+            height: 104,
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: progress),
+              duration: const Duration(milliseconds: 600),
+              curve: Curves.easeOutCubic,
+              builder: (_, value, __) => CircularProgressIndicator(
+                value: value,
+                strokeWidth: 10,
+                backgroundColor: AppColors.bg,
+                valueColor: AlwaysStoppedAnimation<Color>(warna),
+                strokeCap: StrokeCap.round,
+              ),
             ),
+          ),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                "$percent%",
+                style: TextStyle(
+                  color: warna,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  height: 1.1,
+                ),
+              ),
+              const Text(
+                "dari target",
+                style: TextStyle(color: AppColors.textSub, fontSize: 10),
+              ),
+            ],
           ),
         ],
       ),
@@ -412,11 +550,11 @@ class _CircleProgress extends StatelessWidget {
   }
 }
 
-// ── Stat Card ──────────────────────────────────────────────────────────────────
+// ── Kartu ringkasan gizi (grid 2 kolom) ────────────────────────────────────────
 class _StatCard extends StatelessWidget {
   final String label;
-  final dynamic consumed; // Menggunakan dynamic, ditangani di dalam fungsi
-  final dynamic target;
+  final double consumed;
+  final double target;
   final String unit;
   final IconData icon;
   final Color color;
@@ -432,21 +570,20 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // PENCEGAHAN ERROR: Casting num yang aman untuk tipe data API JSON
-    final double consumedVal = (consumed is num) ? consumed.toDouble() : 0.0;
-    final double targetVal   = (target is num && target > 0) ? target.toDouble() : 1.0;
-    
-    final double progress = (consumedVal / targetVal).clamp(0.0, 1.0);
-    final bool isOver = consumedVal >= targetVal;
+    final double safeTarget = target > 0 ? target : 1;
+    final double progress = (consumed / safeTarget).clamp(0.0, 1.0);
+    final bool isOver = target > 0 && consumed > target;
+    final Color warna = isOver ? AppColors.danger : color;
 
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: isOver ? AppColors.danger.withOpacity(0.3) : AppColors.border),
-        boxShadow: [
-          BoxShadow(color: AppColors.shadow, blurRadius: 12, offset: const Offset(0, 2)),
+        border: Border.all(
+            color: isOver ? AppColors.danger.withOpacity(0.35) : AppColors.border),
+        boxShadow: const [
+          BoxShadow(color: AppColors.shadow, blurRadius: 12, offset: Offset(0, 2)),
         ],
       ),
       child: Column(
@@ -455,75 +592,203 @@ class _StatCard extends StatelessWidget {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(10),
+                padding: const EdgeInsets.all(7),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
+                  color: color.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(icon, color: color, size: 20),
+                child: Icon(icon, color: color, size: 16),
               ),
-              const SizedBox(width: 12),
-              Text(
-                label,
-                style: const TextStyle(
-                  color: AppColors.textPri,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const Spacer(),
-              if (isOver)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppColors.danger.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Text(
-                    "Melebihi batas",
-                    style: TextStyle(
-                      color: AppColors.danger,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                    ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.textSub,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    height: 1.3,
                   ),
                 ),
+              ),
             ],
           ),
-          const SizedBox(height: 16),
+
+          const Spacer(),
+
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(
-                "$consumedVal", // Menggunakan nilai yang sudah aman
-                style: TextStyle(
-                  color: isOver ? AppColors.danger : color,
-                  fontSize: 34,
-                  fontWeight: FontWeight.w800,
-                  height: 1,
+              Flexible(
+                child: Text(
+                  _fmt(consumed),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: warna,
+                    fontSize: 26,
+                    fontWeight: FontWeight.w800,
+                    height: 1,
+                  ),
                 ),
               ),
               const SizedBox(width: 4),
               Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text(unit, style: const TextStyle(color: AppColors.textSub, fontSize: 12)),
-              ),
-              const Spacer(),
-              Text(
-                "dari $targetVal $unit",
-                style: const TextStyle(color: AppColors.textSub, fontSize: 12),
+                padding: const EdgeInsets.only(bottom: 2),
+                child: Text(unit,
+                    style: const TextStyle(color: AppColors.textSub, fontSize: 11)),
               ),
             ],
           ),
-          const SizedBox(height: 14),
+
+          const SizedBox(height: 10),
+
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: progress,
-              minHeight: 8,
-              backgroundColor: AppColors.bg,
-              valueColor: AlwaysStoppedAnimation<Color>(isOver ? AppColors.danger : color),
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: progress),
+              duration: const Duration(milliseconds: 600),
+              curve: Curves.easeOutCubic,
+              builder: (_, value, __) => LinearProgressIndicator(
+                value: value,
+                minHeight: 6,
+                backgroundColor: AppColors.bg,
+                valueColor: AlwaysStoppedAnimation<Color>(warna),
+              ),
             ),
+          ),
+
+          const SizedBox(height: 6),
+
+          Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              "${_fmt(consumed)} / ${_fmt(target)} $unit",
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: AppColors.textSub, fontSize: 10),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Kartu jadwal makan ─────────────────────────────────────────────────────────
+class _MealCard extends StatelessWidget {
+  final Map plan;
+  const _MealCard({required this.plan});
+
+  static IconData _iconFor(String waktu) {
+    final w = waktu.toLowerCase();
+    if (w.contains("sarapan")) return Icons.free_breakfast_rounded;
+    if (w.contains("siang")) return Icons.lunch_dining_rounded;
+    if (w.contains("selingan")) return Icons.cookie_rounded;
+    if (w.contains("malam")) return Icons.dinner_dining_rounded;
+    return Icons.restaurant_rounded;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final String waktu = (plan['waktu'] ?? '-').toString();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.border),
+        boxShadow: const [
+          BoxShadow(color: AppColors.shadow, blurRadius: 12, offset: Offset(0, 2)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.accentLight,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(_iconFor(waktu), color: AppColors.accent, size: 16),
+              ),
+              const SizedBox(width: 10),
+
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      waktu,
+                      style: const TextStyle(
+                        color: AppColors.textPri,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      "Target: ${plan['target_kalori'] ?? 0} kcal",
+                      style: const TextStyle(
+                        color: AppColors.textSub,
+                        fontSize: 12,
+                        height: 1.5,
+                      ),
+                    ),
+                    Text(
+                      "Rekomendasi: ${plan['menu_rekomendasi'] ?? '-'}",
+                      style: const TextStyle(
+                        color: AppColors.textSub,
+                        fontSize: 12,
+                        height: 1.5,
+                      ),
+                    ),
+                    Text(
+                      "Fokus: ${plan['catatan_klinis'] ?? '-'}",
+                      style: const TextStyle(
+                        color: AppColors.textSub,
+                        fontSize: 12,
+                        height: 1.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+
+              // Badge jam makan
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                decoration: BoxDecoration(
+                  color: AppColors.accentLight,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.schedule_rounded,
+                        color: AppColors.accent, size: 12),
+                    const SizedBox(width: 4),
+                    Text(
+                      (plan['jam'] ?? '-').toString(),
+                      style: const TextStyle(
+                        color: AppColors.accent,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),

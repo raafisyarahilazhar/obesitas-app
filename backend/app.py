@@ -5,7 +5,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from routers import auth, dashboard, scanner, meals
 
 # IMPORT FUNGSI LOAD CSV DI SINI
-from services.nutrition_service import load_nutrition_database 
+from services.nutrition_service import load_nutrition_database
+
+# Import model & engine untuk membuat tabel yang belum ada (mis. email_verifications)
+from core.database import Base, engine
+from core import models  # noqa: F401  (memastikan semua model terdaftar di Base)
 
 app = FastAPI(
     title="Hybrid Food AI (Diabetic & Obesity Focus)",
@@ -23,7 +27,13 @@ app.add_middleware(
 )
 
 # PANGGIL FUNGSI LOAD CSV DI SINI (Sebelum me-load router)
-load_nutrition_database() 
+load_nutrition_database()
+
+# Buat tabel yang belum ada (tabel lama tidak diubah)
+try:
+    Base.metadata.create_all(bind=engine)
+except Exception as e:
+    print(f"[DB] Gagal menyiapkan tabel database: {e}")
 
 # Daftarkan Router ke aplikasi utama
 app.include_router(auth.router)

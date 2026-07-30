@@ -108,123 +108,139 @@ class _ScannerPageState extends State<ScannerPage> with SingleTickerProviderStat
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bg,
-      body: CustomScrollView(
-        slivers: [
-          // ── App Bar ──────────────────────────────────
-          SliverToBoxAdapter(
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(24, 56, 24, 28),
-              decoration: const BoxDecoration(
-                gradient: AppColors.heroBg,
-                borderRadius: BorderRadius.only(
-                  bottomLeft: Radius.circular(36),
-                  bottomRight: Radius.circular(36),
+      // 1. TAMBAHKAN REFRESH INDICATOR DI SINI 👇
+      body: RefreshIndicator(
+        onRefresh: () async {
+          // Aksi ketika ditarik: Mengosongkan scanner dan memulai dari awal
+          setState(() {
+            imageFile = null;
+            result = null;
+            isLoading = false;
+          });
+          _animController.reset();
+        },
+        color: AppColors.accent,
+        backgroundColor: AppColors.card,
+        child: CustomScrollView(
+          // 2. TAMBAHKAN PHYSICS INI AGAR BISA DITARIK 👇
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            // ── App Bar ──────────────────────────────────
+            SliverToBoxAdapter(
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(24, 56, 24, 28),
+                decoration: const BoxDecoration(
+                  gradient: AppColors.heroBg,
+                  borderRadius: BorderRadius.only(
+                    bottomLeft: Radius.circular(36),
+                    bottomRight: Radius.circular(36),
+                  ),
                 ),
-              ),
-              child: Row(
-                children: [
-                  GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(
-                        Icons.arrow_back_ios_new_rounded,
-                        color: Colors.white,
-                        size: 18,
+                child: Row(
+                  children: [
+                    GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      child: Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.arrow_back_ios_new_rounded,
+                          color: Colors.white,
+                          size: 18,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 16),
-                  const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        "AI Calorie Scanner",
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
+                    const SizedBox(width: 16),
+                    const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "AI Calorie Scanner",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
-                      ),
-                      Text(
-                        "Foto makananmu, deteksi otomatis",
-                        style: TextStyle(color: Colors.white70, fontSize: 12),
-                      ),
-                    ],
-                  ),
-                ],
+                        Text(
+                          "Foto makananmu, deteksi otomatis",
+                          style: TextStyle(color: Colors.white70, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
 
-          // ── Body ─────────────────────────────────────
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
-            sliver: SliverList(
-              delegate: SliverChildListDelegate([
-                const Text(
-                  "FOTO MAKANAN",
-                  style: TextStyle(
-                    color: AppColors.textSub,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.4,
+            // ── Body ─────────────────────────────────────
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
+              sliver: SliverList(
+                delegate: SliverChildListDelegate([
+                  const Text(
+                    "FOTO MAKANAN",
+                    style: TextStyle(
+                      color: AppColors.textSub,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.4,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 12),
+                  const SizedBox(height: 12),
 
-                _buildImageArea(),
-                const SizedBox(height: 16),
+                  _buildImageArea(),
+                  const SizedBox(height: 16),
 
-                if (imageFile == null)
-                  Row(
-                    children: [
-                      Expanded(
-                        child: PickerButton(
-                          icon: Icons.camera_alt_rounded,
-                          label: "Kamera",
-                          onTap: () => _pickImage(ImageSource.camera),
+                  if (imageFile == null)
+                    Row(
+                      children: [
+                        Expanded(
+                          child: PickerButton(
+                            icon: Icons.camera_alt_rounded,
+                            label: "Kamera",
+                            onTap: () => _pickImage(ImageSource.camera),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: PickerButton(
-                          icon: Icons.photo_library_rounded,
-                          label: "Galeri",
-                          onTap: () => _pickImage(ImageSource.gallery),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: PickerButton(
+                            icon: Icons.photo_library_rounded,
+                            label: "Galeri",
+                            onTap: () => _pickImage(ImageSource.gallery),
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
+                      ],
+                    ),
 
-                if (imageFile != null && result == null)
-                  TextButton.icon(
-                    onPressed: () => _pickImage(ImageSource.gallery),
-                    icon: const Icon(Icons.refresh_rounded, size: 16, color: AppColors.textSub),
-                    label: const Text("Ganti foto",
-                        style: TextStyle(color: AppColors.textSub, fontSize: 13)),
-                  ),
+                  if (imageFile != null && result == null)
+                    TextButton.icon(
+                      onPressed: () => _pickImage(ImageSource.gallery),
+                      icon: const Icon(Icons.refresh_rounded, size: 16, color: AppColors.textSub),
+                      label: const Text("Ganti foto",
+                          style: TextStyle(color: AppColors.textSub, fontSize: 13)),
+                    ),
 
-                const SizedBox(height: 8),
+                  const SizedBox(height: 8),
 
-                if (imageFile != null && result == null)
-                  PrimaryButton(
-                    label: "Mulai Analisis",
-                    onTap: _analyzeFood,
-                    isLoading: isLoading,
-                  ),
+                  if (imageFile != null && result == null)
+                    PrimaryButton(
+                      label: "Mulai Analisis",
+                      onTap: _analyzeFood,
+                      isLoading: isLoading,
+                    ),
 
-                if (result != null)
-                  FadeTransition(opacity: _fadeAnim, child: _buildResultList()),
-              ]),
+                  if (result != null)
+                    FadeTransition(opacity: _fadeAnim, child: _buildResultList()),
+                ]),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

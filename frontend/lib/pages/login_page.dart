@@ -4,6 +4,7 @@ import '../widgets/primary_button.dart';
 import '../widgets/main_shell.dart';
 import '../theme/app_colors.dart';
 import 'register_page.dart';
+import 'email_verification_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -30,17 +31,30 @@ class _LoginPageState extends State<LoginPage> {
           MaterialPageRoute(builder: (_) => MainShell(userId: userId)),
         );
       }
+    } on EmailNotVerifiedException catch (e) {
+      // Akun ada tapi emailnya belum diverifikasi → lanjutkan ke halaman OTP
+      if (!mounted) return;
+      _showError(e.message);
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => EmailVerificationPage(email: e.email)),
+      );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(e.toString().replaceAll("Exception: ", "")),
-        backgroundColor: AppColors.danger,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      ));
+      _showError(e.toString().replaceAll("Exception: ", ""));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(message),
+      backgroundColor: AppColors.danger,
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+    ));
   }
 
   @override
