@@ -257,3 +257,10 @@ def create_or_update_health_profile(user_id: int, data: HealthProfileCreate, db:
     db.refresh(profile)
 
     return profile
+
+@router.get("/profile/{user_id}", response_model=HealthProfileResponse)
+def get_health_profile(user_id: int, db: Session = Depends(get_db)):
+    profile = db.query(HealthProfile).filter(HealthProfile.user_id == user_id).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profil kesehatan belum dibuat")
+    return profile

@@ -178,8 +178,22 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> getProfile(int userId) async {
-  final res = await http.get(Uri.parse("$baseUrl/auth/profile/$userId"));
-  if (res.statusCode == 200) return jsonDecode(res.body);
-  throw Exception("Gagal memuat profil");
-}
+    final res = await http.get(Uri.parse("$baseUrl/auth/profile/$userId"));
+    if (res.statusCode == 200) return jsonDecode(res.body);
+    throw Exception("Gagal memuat profil");
+  }
+
+  /// Memperbarui/membuat profil kesehatan user
+  static Future<Map<String, dynamic>> updateProfile(
+      int userId, Map<String, dynamic> data) async {
+    final res = await http.post(
+      Uri.parse("$baseUrl/auth/profile/$userId"),
+      headers: {"Content-Type": "application/json"},
+      body: jsonEncode(data),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
+    }
+    throw Exception(_detailOf(res, "Gagal memperbarui profil"));
+  }
 }

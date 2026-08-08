@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../theme/app_colors.dart';
 import 'login_page.dart';
+import 'edit_profile_page.dart';
+import 'help_faq_page.dart';
+import 'about_app_page.dart';
 
 class ProfilePage extends StatefulWidget {
   final int userId;
@@ -302,10 +305,44 @@ class _ProfilePageState extends State<ProfilePage> {
                   const SizedBox(height: 12),
                   _InfoCard(
                     children: [
-                      _MenuRow(icon: Icons.edit_outlined, label: "Edit Profil", onTap: () {}), _divider(),
+                     _MenuRow(
+                      icon: Icons.edit_outlined, 
+                      label: "Edit Profil", 
+                      onTap: () async {
+                        final updated = await Navigator.push<bool>(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => EditProfilePage(userId: widget.userId),
+                          ),
+                        );
+                        // Jika profil berhasil diperbarui, refresh tampilan ProfilePage
+                        if (updated == true) {
+                          _fetch();
+                        }
+                      },
+                    ),
                       _MenuRow(icon: Icons.notifications_outlined, label: "Notifikasi", onTap: () {}), _divider(),
-                      _MenuRow(icon: Icons.help_outline_rounded, label: "Bantuan & FAQ", onTap: () {}), _divider(),
-                      _MenuRow(icon: Icons.info_outline_rounded, label: "Tentang Aplikasi", onTap: () => _showAboutDialog()),
+                     _MenuRow(
+                        icon: Icons.help_outline_rounded,
+                        label: "Bantuan & FAQ",
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const HelpFaqPage()),
+                          );
+                        },
+                      ),
+                      _divider(),
+                     _MenuRow(
+                        icon: Icons.info_outline_rounded,
+                        label: "Tentang Aplikasi",
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const AboutAppPage()),
+                          );
+                        },
+                      ),
                     ],
                   ),
 
