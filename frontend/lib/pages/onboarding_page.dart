@@ -28,14 +28,67 @@ class _OnboardingPageState extends State<OnboardingPage> {
     super.dispose();
   }
 
+  // Batas wajar untuk perhitungan kalori (Mifflin-St Jeor).
+  static const _minAge = 1, _maxAge = 120;
+  static const _minHeight = 50.0, _maxHeight = 250.0;
+  static const _minWeight = 10.0, _maxWeight = 300.0;
+
+  static double? _toNum(String raw) =>
+      double.tryParse(raw.trim().replaceAll(',', '.'));
+
+  /// Mengembalikan pesan error pertama yang ditemukan, atau null jika valid.
+  String? _validateInputs() {
+    if (_nameController.text.trim().isEmpty) {
+      return "Nama panggilan tidak boleh kosong";
+    }
+
+    final age = int.tryParse(_ageController.text.trim());
+    if (age == null) return "Umur harus berupa angka";
+    if (age < _minAge || age > _maxAge) {
+      return "Umur harus antara $_minAge sampai $_maxAge tahun";
+    }
+
+    final height = _toNum(_heightController.text);
+    if (height == null) return "Tinggi badan harus berupa angka";
+    if (height < _minHeight || height > _maxHeight) {
+      return "Tinggi badan harus antara ${_minHeight.toInt()} sampai ${_maxHeight.toInt()} cm";
+    }
+
+    final weight = _toNum(_weightController.text);
+    if (weight == null) return "Berat badan harus berupa angka";
+    if (weight < _minWeight || weight > _maxWeight) {
+      return "Berat badan harus antara ${_minWeight.toInt()} sampai ${_maxWeight.toInt()} kg";
+    }
+
+    return null;
+  }
+
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(message),
+      backgroundColor: AppColors.danger,
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+    ));
+  }
+
   void _submit() async {
+    // Hentikan sebelum request: tidak menghitung BMR, tidak menyimpan ke database.
+    final validationError = _validateInputs();
+    if (validationError != null) {
+      _showError(validationError);
+      return;
+    }
+
     setState(() => _isLoading = true);
     try {
       final data = {
         "name":      _nameController.text.trim(),
-        "age":       int.tryParse(_ageController.text) ?? 20,
-        "height_cm": double.tryParse(_heightController.text) ?? 0,
-        "weight_kg": double.tryParse(_weightController.text) ?? 0,
+        "age":       int.parse(_ageController.text.trim()),
+        "height_cm": _toNum(_heightController.text)!,
+        "weight_kg": _toNum(_weightController.text)!,
       };
       final bool success = await ApiService.createProfile(widget.userId, data);
       if (success && mounted) {
@@ -45,13 +98,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: const Text("Gagal menyimpan profil"),
-        backgroundColor: AppColors.danger,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      ));
+      _showError("Gagal menyimpan profil");
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

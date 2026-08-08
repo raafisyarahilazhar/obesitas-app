@@ -17,7 +17,7 @@ class EmailNotVerifiedException implements Exception {
 class ApiService {
   static String get baseUrl {
     if (kIsWeb) return "http://127.0.0.1:8000";
-    if (defaultTargetPlatform == TargetPlatform.android) return "http://10.39.138.44:8000";
+    if (defaultTargetPlatform == TargetPlatform.android) return "http://10.210.112.44:8000";
     return "http://127.0.0.1:8000";
   }
 

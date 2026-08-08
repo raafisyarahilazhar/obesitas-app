@@ -1,5 +1,5 @@
 import re
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 
 # Validasi email sederhana (tanpa dependency tambahan seperti email-validator)
@@ -54,9 +54,10 @@ class ResendCodeRequest(BaseModel):
 # Skema untuk input Profil Kesehatan Obesitas
 class HealthProfileCreate(BaseModel):
     name: str
-    age: int
-    height_cm: float
-    weight_kg: float
+    # Batas wajar agar perhitungan BMR/BMI tidak dijalankan pada data mustahil
+    age: int = Field(..., ge=1, le=120)
+    height_cm: float = Field(..., ge=50, le=250)
+    weight_kg: float = Field(..., ge=10, le=300)
 
 # Skema untuk Response Profil agar aman (tidak memunculkan password)
 class HealthProfileResponse(HealthProfileCreate):
